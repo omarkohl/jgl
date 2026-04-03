@@ -2,7 +2,7 @@
 
 > it's a jj-ungle out there
 
-— [Randy Newman](https://en.wikipedia.org/wiki/It%27s_a_Jungle_Out_There), *almost*
+— [Randy Newman](https://en.wikipedia.org/wiki/It%27s_a_Jungle_Out_There_(song)), *almost*
 
 A multi-repo manager for [jujutsu (jj)](https://github.com/jj-vcs/jj). Register repos once, get a unified status dashboard, and run jj commands across all of them. Named after the jungle — a nod to jj, and a natural metaphor for repositories growing wild together.
 
