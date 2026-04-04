@@ -1,0 +1,5 @@
+[[repos]]
+path = "~/projects/foo"
+
+[[repos]]
+path = "~/projects/bar"

@@ -7,7 +7,51 @@
 A multi-repo manager for [jujutsu (jj)](https://github.com/jj-vcs/jj). Register repos once, get a unified status dashboard, and run jj commands across all of them. Named after the jungle — a nod to jj, and a natural metaphor for repositories growing wild together.
 
 > [!NOTE]
-> jungle is in early development and not yet usable.
+> jungle is in early development. Only `jgl add` and `jgl fetch` are implemented.
+
+## Install
+
+```sh
+cargo install --path .
+```
+
+Or build manually:
+
+```sh
+cargo build --release
+# binary at target/release/jgl
+```
+
+## Usage
+
+```sh
+jgl add <path>    # register a jj repository
+jgl fetch         # run `jj git fetch` in all registered repos
+```
+
+Config is stored at `~/.config/jungle/config.toml` (Linux/XDG) or the platform equivalent.
+
+## Development
+
+Requirements: Rust stable (≥ 1.80), [`just`](https://github.com/casey/just), [`cargo-nextest`](https://nexte.st).
+
+```sh
+# run all checks (mirrors CI)
+just check
+
+# format
+just fmt
+
+# watch mode (requires bacon)
+just dev
+```
+
+Run tests directly:
+
+```sh
+cargo test
+cargo nextest run   # parallel, better output
+```
 
 ## Features
 
