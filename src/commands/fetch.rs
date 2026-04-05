@@ -355,7 +355,7 @@ mod tests {
 
         let runner = FakeRunner {
             fail_paths: vec![],
-            changed_paths: vec![repo_a.clone()],
+            changed_paths: vec![repo_a],
         };
         let results = run_with_results(&config_path, &runner).unwrap();
         assert_eq!(results.len(), 1);
