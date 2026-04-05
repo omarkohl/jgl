@@ -14,7 +14,7 @@ fn version_flag() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("0.1.0"));
+        .stdout(predicate::str::is_match(r"jgl \d+\.\d+\.\d+").unwrap());
 }
 
 #[test]
