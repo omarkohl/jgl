@@ -202,6 +202,7 @@ impl BuiltRepo {
             remote_path.to_str().unwrap(),
             path.to_str().unwrap(),
         ]));
+        run_checked(jj_cmd(&path).args(["bookmark", "track", "main", "--remote=origin"]));
         TestClone {
             path,
             remote_paths: self.remote_paths.clone(),
