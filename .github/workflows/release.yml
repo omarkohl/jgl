@@ -55,13 +55,17 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Extract changelog for this version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk "/^## \[${version}\]/{found=1; next} found && /^## /{exit} found && /^\[/{exit} found{print}" CHANGELOG.md > release_notes.md
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes-file CHANGELOG.md \
+            --notes-file release_notes.md \
             artifacts/jgl-linux-x86_64 \
             artifacts/jgl-macos-aarch64 \
             artifacts/jgl-windows-x86_64.exe
