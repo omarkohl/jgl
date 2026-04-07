@@ -1,3 +1,6 @@
+default:
+    @just --list
+
 # Run all checks (mirrors CI)
 check:
     cargo fmt --check
