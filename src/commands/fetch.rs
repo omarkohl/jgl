@@ -62,7 +62,7 @@ impl CommandRunner for ProcessRunner {
 
     fn run_jj_rebase(&self, dir: &Path) -> Result<()> {
         let output = std::process::Command::new("jj")
-            .args(["rebase", "-o", "trunk()"])
+            .args(["rebase", "-b", "@", "-o", "trunk()"])
             .current_dir(dir)
             .output()
             .map_err(|e| anyhow::anyhow!("failed to spawn jj: {e}"))?;
