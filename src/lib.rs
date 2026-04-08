@@ -15,7 +15,7 @@ pub fn run() -> Result<()> {
     let config_path = config_path()?;
 
     match cli.command {
-        Command::Add { path } => commands::add::run(&config_path, &path),
+        Command::Add { path } => commands::add::run(&config_path, &path, &mut std::io::stdout()),
         Command::Fetch {
             verbose,
             rebase,
@@ -27,6 +27,8 @@ pub fn run() -> Result<()> {
                 rebase,
                 with_conflicts,
             },
+            &mut std::io::stdout(),
+            &mut std::io::stderr(),
         ),
     }
 }

@@ -15,7 +15,12 @@ fn add_real_jj_repo_registers_in_config() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     let config = jungle::config::Config::load(&config_path).unwrap();
     assert_eq!(config.repos.len(), 1);
@@ -31,7 +36,12 @@ fn add_repo_with_remote_registers_correctly() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     let config = jungle::config::Config::load(&config_path).unwrap();
     assert_eq!(config.repos.len(), 1);
@@ -51,7 +61,12 @@ fn fetch_pulls_commits_pushed_by_clone() {
 
     // Register repo in config
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     // A second client clones, commits, and pushes
     let clone = repo.clone_as(tmp.path().join("clone"));
@@ -71,6 +86,8 @@ fn fetch_pulls_commits_pushed_by_clone() {
             rebase: false,
             with_conflicts: false,
         },
+        &mut std::io::sink(),
+        &mut std::io::sink(),
     )
     .unwrap();
 
@@ -95,8 +112,18 @@ fn fetch_multiple_repos_all_updated() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo_a.path().to_str().unwrap()).unwrap();
-    jungle::commands::add::run(&config_path, repo_b.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_a.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_b.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     // Push new commits from clones
     let clone_a = repo_a.clone_as(tmp.path().join("clone_a"));
@@ -114,6 +141,8 @@ fn fetch_multiple_repos_all_updated() {
             rebase: false,
             with_conflicts: false,
         },
+        &mut std::io::sink(),
+        &mut std::io::sink(),
     )
     .unwrap();
 
@@ -134,7 +163,12 @@ fn fetch_fails_when_repo_is_deleted() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     std::fs::remove_dir_all(repo.path()).unwrap();
 
@@ -145,6 +179,8 @@ fn fetch_fails_when_repo_is_deleted() {
             rebase: false,
             with_conflicts: false,
         },
+        &mut std::io::sink(),
+        &mut std::io::sink(),
     )
     .unwrap_err();
     assert!(err.to_string().contains("failed"));
@@ -159,7 +195,12 @@ fn fetch_fails_when_remote_is_deleted() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     // Remove the bare remote so fetch has nowhere to pull from
     std::fs::remove_dir_all(repo.remote_path("origin")).unwrap();
@@ -171,6 +212,8 @@ fn fetch_fails_when_remote_is_deleted() {
             rebase: false,
             with_conflicts: false,
         },
+        &mut std::io::sink(),
+        &mut std::io::sink(),
     )
     .unwrap_err();
     assert!(err.to_string().contains("failed"));
@@ -193,8 +236,18 @@ fn fetch_continues_after_partial_failure() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo_a.path().to_str().unwrap()).unwrap();
-    jungle::commands::add::run(&config_path, repo_b.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_a.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_b.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     // Push a new commit to repo_b's remote
     let clone_b = repo_b.clone_as(tmp.path().join("clone_b"));
@@ -212,6 +265,8 @@ fn fetch_continues_after_partial_failure() {
             rebase: false,
             with_conflicts: false,
         },
+        &mut std::io::sink(),
+        &mut std::io::sink(),
     )
     .unwrap_err();
     assert!(err.to_string().contains("failed"));
@@ -238,8 +293,18 @@ fn fetch_result_shows_changed_and_unchanged() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo_a.path().to_str().unwrap()).unwrap();
-    jungle::commands::add::run(&config_path, repo_b.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_a.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_b.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     // Push a new commit only to repo_a's remote
     let clone_a = repo_a.clone_as(tmp.path().join("clone_a"));
@@ -286,7 +351,12 @@ fn fetch_labels_repos_by_dirname() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo_a.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_a.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     let results = jungle::commands::fetch::run_with_results(
         &config_path,
@@ -318,7 +388,12 @@ fn fetch_rebase_fails_when_working_change_on_immutable_not_in_main() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     // Advance origin/main via a clone so trunk() will move after fetch
     let clone = repo.clone_as(tmp.path().join("clone"));
@@ -362,7 +437,7 @@ fn fetch_rebase_fails_when_working_change_on_immutable_not_in_main() {
 
     let mut out = Vec::<u8>::new();
     let mut err = Vec::<u8>::new();
-    jungle::commands::fetch::display_results(&results, &mut out, &mut err).unwrap();
+    jungle::commands::fetch::display_results(&results, false, &mut out, &mut err).unwrap();
     let stdout = String::from_utf8(out).unwrap();
     let stderr = String::from_utf8(err).unwrap();
 
@@ -394,8 +469,18 @@ fn fetch_disambiguates_same_dirname() {
         .build();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo_a.path().to_str().unwrap()).unwrap();
-    jungle::commands::add::run(&config_path, repo_b.path().to_str().unwrap()).unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_a.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
+    jungle::commands::add::run(
+        &config_path,
+        repo_b.path().to_str().unwrap(),
+        &mut std::io::sink(),
+    )
+    .unwrap();
 
     let results = jungle::commands::fetch::run_with_results(
         &config_path,

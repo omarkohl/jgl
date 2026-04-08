@@ -52,7 +52,7 @@ fn add_valid_repo_updates_config() {
     std::fs::create_dir_all(repo.join(".jj")).unwrap();
 
     let config_path = tmp.path().join("config.toml");
-    jungle::commands::add::run(&config_path, repo.to_str().unwrap()).unwrap();
+    jungle::commands::add::run(&config_path, repo.to_str().unwrap(), &mut std::io::sink()).unwrap();
 
     let config = jungle::config::Config::load(&config_path).unwrap();
     assert_eq!(config.repos.len(), 1);
@@ -69,6 +69,8 @@ fn fetch_with_no_config_succeeds() {
             rebase: false,
             with_conflicts: false,
         },
+        &mut std::io::sink(),
+        &mut std::io::sink(),
     )
     .unwrap();
 }

@@ -350,6 +350,7 @@ const fn rebase_suffix(fetch: &FetchStatus, rebase: &RebaseStatus) -> &'static s
 /// Returns an error if writing to `out` or `err` fails.
 pub fn display_results(
     results: &[FetchResult],
+    verbose: bool,
     out: &mut impl Write,
     err: &mut impl Write,
 ) -> std::io::Result<()> {
@@ -362,37 +363,36 @@ pub fn display_results(
             }
             FetchStatus::Failed(e) => writeln!(err, "  error      {}: {e}", result.label)?,
         }
+        if verbose {
+            if let RebaseStatus::Failed(e) = &result.rebase_status {
+                writeln!(err, "  rebase error {}: {e}", result.label)?;
+            }
+        }
     }
     Ok(())
 }
 
 /// # Errors
 /// Returns an error if the config cannot be loaded or any fetch fails.
-pub fn run(config_path: &Path, opts: &FetchOptions) -> Result<()> {
+pub fn run(
+    config_path: &Path,
+    opts: &FetchOptions,
+    out: &mut impl Write,
+    err: &mut impl Write,
+) -> Result<()> {
     let config = Config::load_or_default(config_path)?;
 
     if config.repos.is_empty() {
-        println!("No repositories registered. Use `jgl add <path>` to add one.");
+        writeln!(
+            out,
+            "No repositories registered. Use `jgl add <path>` to add one."
+        )?;
         return Ok(());
     }
 
     let results = run_with_results(config_path, &ProcessRunner, opts)?;
 
-    if opts.verbose {
-        for result in &results {
-            let suffix = rebase_suffix(&result.status, &result.rebase_status);
-            match &result.status {
-                FetchStatus::Changed => println!("  changed    {}{suffix}", result.label),
-                FetchStatus::Unchanged => println!("  unchanged  {}{suffix}", result.label),
-                FetchStatus::Failed(e) => eprintln!("  error      {}: {e}", result.label),
-            }
-            if let RebaseStatus::Failed(e) = &result.rebase_status {
-                eprintln!("  rebase error {}: {e}", result.label);
-            }
-        }
-    } else {
-        display_results(&results, &mut std::io::stdout(), &mut std::io::stderr())?;
-    }
+    display_results(&results, opts.verbose, out, err)?;
 
     let failures = results
         .iter()
@@ -543,7 +543,12 @@ mod tests {
     fn empty_config_prints_hint() {
         let tmp = TempDir::new().unwrap();
         let config_path = tmp.path().join("config.toml");
-        run(&config_path, &no_rebase()).unwrap();
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        run(&config_path, &no_rebase(), &mut out, &mut err).unwrap();
+        assert!(String::from_utf8(out)
+            .unwrap()
+            .contains("No repositories registered"));
     }
 
     #[test]
