@@ -3,7 +3,8 @@ pub mod commands;
 pub mod config;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use etcetera::{choose_app_strategy, AppStrategy, AppStrategyArgs};
 
 use cli::{Cli, Command};
@@ -12,9 +13,16 @@ use cli::{Cli, Command};
 /// Returns an error if argument parsing fails or the subcommand returns an error.
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
+
+    if let Command::Completions { shell } = cli.command {
+        generate(shell, &mut Cli::command(), "jgl", &mut std::io::stdout());
+        return Ok(());
+    }
+
     let config_path = config_path()?;
 
     match cli.command {
+        Command::Completions { .. } => unreachable!(),
         Command::Add { path } => commands::add::run(&config_path, &path, &mut std::io::stdout()),
         Command::Fetch {
             verbose,

@@ -65,6 +65,23 @@ jgl exec log -r 'trunk()'
 jgl exec -g work git push
 ```
 
+## Shell completion
+
+Generate and load completions for your shell:
+
+```sh
+# bash
+source <(jgl completions bash)
+
+# zsh
+source <(jgl completions zsh)
+
+# fish
+jgl completions fish | source
+```
+
+To persist, add the `source` line to your shell's rc file (e.g. `~/.bashrc`, `~/.zshrc`).
+
 ## Tech stack
 
 Rust, single binary, no runtime deps. See [docs/design.md](docs/design.md) for architecture and [docs/plan-basics.md](docs/plan-basics.md) for the implementation plan.

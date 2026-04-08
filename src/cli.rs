@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 
 #[derive(Parser)]
 #[command(name = "jgl", version, about = "Multi-repo manager for jujutsu (jj)")]
@@ -14,6 +15,8 @@ pub enum Command {
         /// Path to the jj repository
         path: String,
     },
+    /// Generate shell completions
+    Completions { shell: Shell },
     /// Run `jj git fetch` in all registered repositories
     Fetch {
         /// Show full jj output for each repository
