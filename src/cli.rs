@@ -22,11 +22,17 @@ pub enum Command {
         /// Show full jj output for each repository
         #[arg(short, long)]
         verbose: bool,
-        /// Rebase working-copy branch onto `trunk()` after each fetch
-        #[arg(long)]
+        /// Rebase working-copy branch onto `trunk()` after each fetch (overrides config)
+        #[arg(long, overrides_with = "no_rebase")]
         rebase: bool,
-        /// Keep rebase even if it introduces conflicts (requires --rebase)
-        #[arg(long, requires = "rebase")]
+        /// Do not rebase after fetch (overrides config)
+        #[arg(long, overrides_with = "rebase")]
+        no_rebase: bool,
+        /// Keep rebase even if it introduces conflicts (overrides config)
+        #[arg(long, overrides_with = "no_with_conflicts")]
         with_conflicts: bool,
+        /// Undo rebase if it introduces conflicts (overrides config)
+        #[arg(long, overrides_with = "with_conflicts")]
+        without_conflicts: bool,
     },
 }

@@ -4,9 +4,17 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FetchConfig {
+    pub rebase: Option<bool>,
+    pub with_conflicts: Option<bool>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     #[serde(default)]
     pub repos: Vec<Repo>,
+    #[serde(default)]
+    pub fetch: FetchConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -129,6 +137,7 @@ path = "/home/user/bar"
             repos: vec![Repo {
                 path: "~/projects/foo".into(),
             }],
+            ..Default::default()
         };
         let output = toml::to_string_pretty(&config).unwrap();
         assert!(output.contains("~/projects/foo"));
@@ -142,6 +151,7 @@ path = "/home/user/bar"
             repos: vec![Repo {
                 path: "~/projects/foo".into(),
             }],
+            ..Default::default()
         };
         config.save(&path).unwrap();
         let loaded = Config::load(&path).unwrap();

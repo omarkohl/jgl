@@ -9,6 +9,16 @@ use etcetera::{choose_app_strategy, AppStrategy, AppStrategyArgs};
 
 use cli::{Cli, Command};
 
+fn resolve_flag(cli_true: bool, cli_false: bool, config_val: Option<bool>) -> bool {
+    if cli_true {
+        true
+    } else if cli_false {
+        false
+    } else {
+        config_val.unwrap_or(false)
+    }
+}
+
 /// # Errors
 /// Returns an error if argument parsing fails or the subcommand returns an error.
 pub fn run() -> Result<()> {
@@ -27,17 +37,28 @@ pub fn run() -> Result<()> {
         Command::Fetch {
             verbose,
             rebase,
+            no_rebase,
             with_conflicts,
-        } => commands::fetch::run(
-            &config_path,
-            &commands::fetch::FetchOptions {
-                verbose,
-                rebase,
+            without_conflicts,
+        } => {
+            let config = config::Config::load_or_default(&config_path)?;
+            let effective_rebase = resolve_flag(rebase, no_rebase, config.fetch.rebase);
+            let effective_with_conflicts = resolve_flag(
                 with_conflicts,
-            },
-            &mut std::io::stdout(),
-            &mut std::io::stderr(),
-        ),
+                without_conflicts,
+                config.fetch.with_conflicts,
+            );
+            commands::fetch::run(
+                &config_path,
+                &commands::fetch::FetchOptions {
+                    verbose,
+                    rebase: effective_rebase,
+                    with_conflicts: effective_with_conflicts,
+                },
+                &mut std::io::stdout(),
+                &mut std::io::stderr(),
+            )
+        }
     }
 }
 

@@ -29,7 +29,21 @@ jgl add <path>    # register a jj repository
 jgl fetch         # run `jj git fetch` in all registered repos
 ```
 
-Config is stored at `~/.config/jungle/config.toml` (Linux/XDG) or the platform equivalent.
+Config is stored at `~/.config/jungle/config.toml` (Linux/XDG) or the platform equivalent:
+
+```toml
+[[repos]]
+path = "~/projects/foo"
+
+[[repos]]
+path = "~/projects/bar"
+
+[fetch]
+rebase = true          # rebase onto trunk() after each fetch (default: false)
+with_conflicts = false # allow rebase even if it introduces conflicts (default: false)
+```
+
+CLI flags override config: `--rebase`/`--no-rebase` and `--with-conflicts`/`--without-conflicts`.
 
 ## Features
 

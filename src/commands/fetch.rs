@@ -527,6 +527,7 @@ mod tests {
                     path: (*p).to_owned(),
                 })
                 .collect(),
+            ..Default::default()
         };
         config.save(path).unwrap();
     }
