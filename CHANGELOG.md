@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-08
+
+### Fixed
+
+- Updated `fastrand` dependency from yanked `2.4.0` to `2.4.1`
+
 ## [0.3.0] - 2026-04-08
 
 ### Added
@@ -40,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic short labels for each repo (disambiguated by path suffix when names collide)
 - `--verbose` / `-v` flag on `jgl fetch` to show full jj output per repository
 
-[Unreleased]: https://github.com/omarkohl/jgl/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/omarkohl/jgl/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/omarkohl/jgl/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/omarkohl/jgl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/omarkohl/jgl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/omarkohl/jgl/releases/tag/v0.1.0
