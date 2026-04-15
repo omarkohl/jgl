@@ -1,13 +1,111 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::process::{Output, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 
 use crate::config::Config;
 
 const PARALLEL_LIMIT: usize = 4;
+
+/// Default idle timeout for fetch operations (in seconds).
+pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 10;
+
+/// Sentinel error returned when a process is killed due to idle timeout.
+#[derive(Debug)]
+pub struct IdleTimeoutError;
+
+impl std::fmt::Display for IdleTimeoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("idle timeout exceeded")
+    }
+}
+
+impl std::error::Error for IdleTimeoutError {}
+
+/// Read from `reader` in a loop, appending to a buffer and updating the
+/// shared `last_activity` timestamp on every successful read.
+fn drain_with_activity(mut reader: impl std::io::Read, last_activity: &Mutex<Instant>) -> Vec<u8> {
+    let mut buf = [0u8; 4096];
+    let mut data = Vec::new();
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                data.extend_from_slice(&buf[..n]);
+                if let Ok(mut ts) = last_activity.lock() {
+                    *ts = Instant::now();
+                }
+            }
+        }
+    }
+    data
+}
+
+/// Spawn `cmd` and kill it if no stdout/stderr output arrives within
+/// `idle_timeout`.  Returns the collected `Output` on success, or an
+/// `IdleTimeoutError` if the process stalls.
+fn spawn_with_idle_timeout(
+    cmd: &mut std::process::Command,
+    idle_timeout: Duration,
+) -> Result<Output> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("failed to spawn process: {e}"))?;
+
+    // Safety: stdout/stderr are guaranteed to be Some after piped() + spawn()
+    let stdout_pipe = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("no stdout"))?;
+    let stderr_pipe = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("no stderr"))?;
+
+    let last_activity = Arc::new(Mutex::new(Instant::now()));
+
+    let la_out = Arc::clone(&last_activity);
+    let stdout_handle = thread::spawn(move || drain_with_activity(stdout_pipe, &la_out));
+
+    let la_err = Arc::clone(&last_activity);
+    let stderr_handle = thread::spawn(move || drain_with_activity(stderr_pipe, &la_err));
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = stdout_handle.join().unwrap_or_default();
+                let stderr = stderr_handle.join().unwrap_or_default();
+                return Ok(Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                let idle = last_activity
+                    .lock()
+                    .map(|ts| ts.elapsed())
+                    .unwrap_or(Duration::ZERO);
+                if idle >= idle_timeout {
+                    // Kill and reap
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(IdleTimeoutError.into());
+                }
+                thread::sleep(Duration::from_millis(250));
+            }
+            Err(e) => return Err(anyhow::anyhow!("failed to wait on child: {e}")),
+        }
+    }
+}
 
 pub struct FetchOutput {
     pub changed: bool,
@@ -31,17 +129,23 @@ pub trait CommandRunner: Sync {
     fn run_jj_undo(&self, dir: &Path) -> Result<()>;
 }
 
-pub struct ProcessRunner;
+pub struct ProcessRunner {
+    pub idle_timeout: Duration,
+}
 
 impl CommandRunner for ProcessRunner {
     fn run_jj_fetch(&self, dir: &Path) -> Result<FetchOutput> {
         let refs_before = git_remote_refs(dir)?;
 
-        let output = std::process::Command::new("jj")
-            .args(["git", "fetch"])
-            .current_dir(dir)
-            .output()
-            .map_err(|e| anyhow::anyhow!("failed to spawn jj: {e}"))?;
+        let mut cmd = std::process::Command::new("jj");
+        cmd.args(["git", "fetch"]).current_dir(dir);
+
+        let output = if self.idle_timeout.is_zero() {
+            cmd.output()
+                .map_err(|e| anyhow::anyhow!("failed to spawn jj: {e}"))?
+        } else {
+            spawn_with_idle_timeout(&mut cmd, self.idle_timeout)?
+        };
 
         if output.status.success() {
             let refs_after = git_remote_refs(dir)?;
@@ -134,6 +238,7 @@ fn git_remote_refs(dir: &Path) -> Result<String> {
 pub enum FetchStatus {
     Changed,
     Unchanged,
+    TimedOut,
     Failed(String),
 }
 
@@ -150,6 +255,7 @@ pub struct FetchOptions {
     pub verbose: bool,
     pub rebase: bool,
     pub with_conflicts: bool,
+    pub idle_timeout: Duration,
 }
 
 #[derive(Debug)]
@@ -267,15 +373,21 @@ pub fn run_with_results(
                         let fetch_status = match fetch_outcome {
                             Ok(ref out) if out.changed => FetchStatus::Changed,
                             Ok(_) => FetchStatus::Unchanged,
+                            Err(ref e) if e.downcast_ref::<IdleTimeoutError>().is_some() => {
+                                FetchStatus::TimedOut
+                            }
                             Err(ref e) => FetchStatus::Failed(e.to_string()),
                         };
 
-                        let rebase_status =
-                            if opts.rebase && !matches!(fetch_status, FetchStatus::Failed(_)) {
-                                do_rebase(runner, path, opts.with_conflicts)
-                            } else {
-                                RebaseStatus::Skipped
-                            };
+                        let rebase_status = if opts.rebase
+                            && !matches!(
+                                fetch_status,
+                                FetchStatus::Failed(_) | FetchStatus::TimedOut
+                            ) {
+                            do_rebase(runner, path, opts.with_conflicts)
+                        } else {
+                            RebaseStatus::Skipped
+                        };
 
                         (i, fetch_status, rebase_status)
                     })
@@ -361,6 +473,7 @@ pub fn display_results(
             FetchStatus::Unchanged => {
                 writeln!(out, "  unchanged  {}{suffix}", result.label)?;
             }
+            FetchStatus::TimedOut => writeln!(err, "  timed out  {}", result.label)?,
             FetchStatus::Failed(e) => writeln!(err, "  error      {}: {e}", result.label)?,
         }
         if verbose {
@@ -390,13 +503,16 @@ pub fn run(
         return Ok(());
     }
 
-    let results = run_with_results(config_path, &ProcessRunner, opts)?;
+    let runner = ProcessRunner {
+        idle_timeout: opts.idle_timeout,
+    };
+    let results = run_with_results(config_path, &runner, opts)?;
 
     display_results(&results, opts.verbose, out, err)?;
 
     let failures = results
         .iter()
-        .filter(|r| matches!(r.status, FetchStatus::Failed(_)))
+        .filter(|r| matches!(r.status, FetchStatus::Failed(_) | FetchStatus::TimedOut))
         .count();
     if failures > 0 {
         anyhow::bail!("{failures} fetch(es) failed");
@@ -424,6 +540,7 @@ mod tests {
     struct FakeRunner {
         fail_paths: Vec<PathBuf>,
         changed_paths: Vec<PathBuf>,
+        timeout_paths: Vec<PathBuf>,
         rebase_fail_paths: Vec<PathBuf>,
         // Queue of responses for successive run_jj_conflicts calls
         conflict_responses: Arc<Mutex<Vec<Vec<String>>>>,
@@ -435,6 +552,7 @@ mod tests {
             Self {
                 fail_paths: vec![],
                 changed_paths: vec![],
+                timeout_paths: vec![],
                 rebase_fail_paths: vec![],
                 conflict_responses: Arc::new(Mutex::new(vec![])),
                 calls: Arc::new(Mutex::new(vec![])),
@@ -448,6 +566,11 @@ mod tests {
 
         fn with_changed(mut self, path: PathBuf) -> Self {
             self.changed_paths.push(path);
+            self
+        }
+
+        fn with_timeout(mut self, path: PathBuf) -> Self {
+            self.timeout_paths.push(path);
             self
         }
 
@@ -472,6 +595,9 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(Call::Fetch(dir.to_path_buf()));
+            if self.timeout_paths.iter().any(|p| p == dir) {
+                return Err(IdleTimeoutError.into());
+            }
             if self.fail_paths.iter().any(|p| p == dir) {
                 anyhow::bail!("simulated failure");
             }
@@ -537,6 +663,7 @@ mod tests {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         }
     }
 
@@ -644,6 +771,7 @@ mod tests {
             verbose: false,
             rebase: true,
             with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         };
         let results = run_with_results(&config_path, &runner, &opts).unwrap();
         assert_eq!(results.len(), 1);
@@ -670,6 +798,7 @@ mod tests {
             verbose: false,
             rebase: true,
             with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         };
         let results = run_with_results(&config_path, &runner, &opts).unwrap();
         assert!(
@@ -697,6 +826,7 @@ mod tests {
             verbose: false,
             rebase: true,
             with_conflicts: true,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         };
         let results = run_with_results(&config_path, &runner, &opts).unwrap();
         assert!(
@@ -726,6 +856,7 @@ mod tests {
             verbose: false,
             rebase: true,
             with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         };
         let results = run_with_results(&config_path, &runner, &opts).unwrap();
         assert!(
@@ -752,6 +883,7 @@ mod tests {
             verbose: false,
             rebase: true,
             with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         };
         let results = run_with_results(&config_path, &runner, &opts).unwrap();
         assert!(
@@ -778,6 +910,7 @@ mod tests {
             verbose: false,
             rebase: true,
             with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         };
         let results = run_with_results(&config_path, &runner, &opts).unwrap();
         assert!(
@@ -796,12 +929,7 @@ mod tests {
         write_config(&config_path, &[repo_a.to_str().unwrap()]);
 
         let runner = FakeRunner::new();
-        let opts = FetchOptions {
-            verbose: false,
-            rebase: false,
-            with_conflicts: false,
-        };
-        let results = run_with_results(&config_path, &runner, &opts).unwrap();
+        let results = run_with_results(&config_path, &runner, &no_rebase()).unwrap();
         assert!(
             matches!(results[0].rebase_status, RebaseStatus::Skipped),
             "expected Skipped, got {:?}",
@@ -901,5 +1029,157 @@ mod tests {
                 " (rebase failed)"
             );
         }
+    }
+
+    // --- idle timeout tests ---
+
+    #[test]
+    fn timeout_captured_as_timed_out_status() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = tmp.path().join("config.toml");
+        let repo_a = tmp.path().join("repo_a");
+        std::fs::create_dir_all(&repo_a).unwrap();
+        write_config(&config_path, &[repo_a.to_str().unwrap()]);
+
+        let runner = FakeRunner::new().with_timeout(repo_a);
+        let results = run_with_results(&config_path, &runner, &no_rebase()).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(results[0].status, FetchStatus::TimedOut),
+            "expected TimedOut, got {:?}",
+            results[0].status
+        );
+    }
+
+    #[test]
+    fn rebase_skipped_on_timeout() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = tmp.path().join("config.toml");
+        let repo_a = tmp.path().join("repo_a");
+        std::fs::create_dir_all(&repo_a).unwrap();
+        write_config(&config_path, &[repo_a.to_str().unwrap()]);
+
+        let runner = FakeRunner::new().with_timeout(repo_a.clone());
+        let opts = FetchOptions {
+            verbose: false,
+            rebase: true,
+            with_conflicts: false,
+            idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
+        };
+        let results = run_with_results(&config_path, &runner, &opts).unwrap();
+        assert!(
+            matches!(results[0].rebase_status, RebaseStatus::Skipped),
+            "expected Skipped after timeout, got {:?}",
+            results[0].rebase_status
+        );
+        assert!(
+            !runner.was_called(&Call::Rebase(repo_a)),
+            "expected rebase NOT to be called after timeout"
+        );
+    }
+
+    #[test]
+    fn display_results_shows_timed_out() {
+        let results = vec![FetchResult {
+            path: PathBuf::from("/repo"),
+            label: "repo".to_owned(),
+            status: FetchStatus::TimedOut,
+            rebase_status: RebaseStatus::Skipped,
+        }];
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        display_results(&results, false, &mut out, &mut err).unwrap();
+        let err_str = String::from_utf8(err).unwrap();
+        assert!(
+            err_str.contains("timed out"),
+            "expected 'timed out' in stderr, got: {err_str}"
+        );
+        assert!(
+            err_str.contains("repo"),
+            "expected label in stderr, got: {err_str}"
+        );
+    }
+
+    #[test]
+    fn timeout_mixed_with_success() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = tmp.path().join("config.toml");
+        let repo_a = tmp.path().join("repo_a");
+        let repo_b = tmp.path().join("repo_b");
+        std::fs::create_dir_all(&repo_a).unwrap();
+        std::fs::create_dir_all(&repo_b).unwrap();
+        write_config(
+            &config_path,
+            &[repo_a.to_str().unwrap(), repo_b.to_str().unwrap()],
+        );
+
+        let runner = FakeRunner::new()
+            .with_timeout(repo_a.clone())
+            .with_changed(repo_b.clone());
+        let results = run_with_results(&config_path, &runner, &no_rebase()).unwrap();
+        let a = results.iter().find(|r| r.path == repo_a).unwrap();
+        let b = results.iter().find(|r| r.path == repo_b).unwrap();
+        assert!(matches!(a.status, FetchStatus::TimedOut));
+        assert!(matches!(b.status, FetchStatus::Changed));
+    }
+
+    // --- spawn_with_idle_timeout integration tests ---
+
+    #[test]
+    fn idle_timeout_kills_stalled_process() {
+        let mut cmd = std::process::Command::new("sleep");
+        cmd.arg("60");
+        let start = Instant::now();
+        let result = spawn_with_idle_timeout(&mut cmd, Duration::from_secs(1));
+        let elapsed = start.elapsed();
+        assert!(result.is_err(), "expected error from timed-out process");
+        assert!(
+            result
+                .unwrap_err()
+                .downcast_ref::<IdleTimeoutError>()
+                .is_some(),
+            "expected IdleTimeoutError"
+        );
+        // Should complete in roughly 1-2 seconds, not 60
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "took too long: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn idle_timeout_allows_active_process() {
+        // Process outputs every 0.3s for ~0.9s total; idle timeout is 2s
+        let mut cmd = std::process::Command::new("bash");
+        cmd.args(["-c", "for i in 1 2 3; do echo progress; sleep 0.3; done"]);
+        let result = spawn_with_idle_timeout(&mut cmd, Duration::from_secs(2));
+        assert!(
+            result.is_ok(),
+            "active process should not time out: {result:?}"
+        );
+        let output = result.unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("progress"),
+            "expected progress output, got: {stdout}"
+        );
+    }
+
+    #[test]
+    fn idle_timeout_resets_on_output() {
+        // Process is silent for 0.5s, then outputs, then silent for 0.5s, then outputs.
+        // Total ~2s, but idle timeout is 1s. Since output arrives before each 1s window,
+        // the process should complete.
+        let mut cmd = std::process::Command::new("bash");
+        cmd.args([
+            "-c",
+            "sleep 0.5; echo a; sleep 0.5; echo b; sleep 0.5; echo c",
+        ]);
+        let result = spawn_with_idle_timeout(&mut cmd, Duration::from_secs(1));
+        assert!(
+            result.is_ok(),
+            "process with periodic output should not time out: {result:?}"
+        );
     }
 }

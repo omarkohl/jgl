@@ -34,5 +34,9 @@ pub enum Command {
         /// Undo rebase if it introduces conflicts (overrides config)
         #[arg(long, overrides_with = "with_conflicts")]
         without_conflicts: bool,
+        /// Idle timeout in seconds: kill `jj git fetch` if it produces no output
+        /// for this long. 0 disables the timeout. (overrides config)
+        #[arg(long)]
+        idle_timeout: Option<u64>,
     },
 }

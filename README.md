@@ -42,9 +42,10 @@ path = "~/projects/bar"
 [fetch]
 rebase = true          # rebase onto trunk() after each fetch (default: false)
 with_conflicts = false # allow rebase even if it introduces conflicts (default: false)
+idle_timeout = 10      # kill fetch if silent for this many seconds; 0 disables (default: 10)
 ```
 
-CLI flags override config: `--rebase`/`--no-rebase` and `--with-conflicts`/`--without-conflicts`.
+CLI flags override config: `--rebase`/`--no-rebase`, `--with-conflicts`/`--without-conflicts`, and `--idle-timeout <seconds>`.
 
 ## Shell completions
 

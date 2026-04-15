@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 pub struct FetchConfig {
     pub rebase: Option<bool>,
     pub with_conflicts: Option<bool>,
+    /// Idle timeout in seconds for fetch operations. If `jj git fetch` produces
+    /// no output for this many seconds, the process is killed. Set to 0 to disable.
+    /// When absent, a built-in default is used.
+    pub idle_timeout: Option<u64>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]

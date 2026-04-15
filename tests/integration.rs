@@ -85,6 +85,9 @@ fn fetch_pulls_commits_pushed_by_clone() {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
         &mut std::io::sink(),
         &mut std::io::sink(),
@@ -140,6 +143,9 @@ fn fetch_multiple_repos_all_updated() {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
         &mut std::io::sink(),
         &mut std::io::sink(),
@@ -178,6 +184,9 @@ fn fetch_fails_when_repo_is_deleted() {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
         &mut std::io::sink(),
         &mut std::io::sink(),
@@ -211,6 +220,9 @@ fn fetch_fails_when_remote_is_deleted() {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
         &mut std::io::sink(),
         &mut std::io::sink(),
@@ -264,6 +276,9 @@ fn fetch_continues_after_partial_failure() {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
         &mut std::io::sink(),
         &mut std::io::sink(),
@@ -313,11 +328,18 @@ fn fetch_result_shows_changed_and_unchanged() {
 
     let results = jgl::commands::fetch::run_with_results(
         &config_path,
-        &jgl::commands::fetch::ProcessRunner,
+        &jgl::commands::fetch::ProcessRunner {
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
+        },
         &jgl::commands::fetch::FetchOptions {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
     )
     .unwrap();
@@ -357,11 +379,18 @@ fn fetch_labels_repos_by_dirname() {
 
     let results = jgl::commands::fetch::run_with_results(
         &config_path,
-        &jgl::commands::fetch::ProcessRunner,
+        &jgl::commands::fetch::ProcessRunner {
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
+        },
         &jgl::commands::fetch::FetchOptions {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
     )
     .unwrap();
@@ -413,11 +442,18 @@ fn fetch_rebase_fails_when_working_change_on_immutable_not_in_main() {
     // `jj rebase -b @ -o trunk()` fails because @- is immutable and not in main
     let results = jgl::commands::fetch::run_with_results(
         &config_path,
-        &jgl::commands::fetch::ProcessRunner,
+        &jgl::commands::fetch::ProcessRunner {
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
+        },
         &jgl::commands::fetch::FetchOptions {
             verbose: false,
             rebase: true,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
     )
     .unwrap();
@@ -481,11 +517,18 @@ fn fetch_disambiguates_same_dirname() {
 
     let results = jgl::commands::fetch::run_with_results(
         &config_path,
-        &jgl::commands::fetch::ProcessRunner,
+        &jgl::commands::fetch::ProcessRunner {
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
+        },
         &jgl::commands::fetch::FetchOptions {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
     )
     .unwrap();

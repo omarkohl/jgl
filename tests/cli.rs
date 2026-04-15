@@ -68,6 +68,9 @@ fn fetch_with_no_config_succeeds() {
             verbose: false,
             rebase: false,
             with_conflicts: false,
+            idle_timeout: std::time::Duration::from_secs(
+                jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
+            ),
         },
         &mut std::io::sink(),
         &mut std::io::sink(),

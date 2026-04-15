@@ -7,6 +7,8 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use etcetera::{choose_app_strategy, AppStrategy, AppStrategyArgs};
 
+use std::time::Duration;
+
 use cli::{Cli, Command};
 
 fn resolve_flag(cli_true: bool, cli_false: bool, config_val: Option<bool>) -> bool {
@@ -40,6 +42,7 @@ pub fn run() -> Result<()> {
             no_rebase,
             with_conflicts,
             without_conflicts,
+            idle_timeout,
         } => {
             let config = config::Config::load_or_default(&config_path)?;
             let effective_rebase = resolve_flag(rebase, no_rebase, config.fetch.rebase);
@@ -48,12 +51,16 @@ pub fn run() -> Result<()> {
                 without_conflicts,
                 config.fetch.with_conflicts,
             );
+            let idle_timeout_secs = idle_timeout
+                .or(config.fetch.idle_timeout)
+                .unwrap_or(commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS);
             commands::fetch::run(
                 &config_path,
                 &commands::fetch::FetchOptions {
                     verbose,
                     rebase: effective_rebase,
                     with_conflicts: effective_with_conflicts,
+                    idle_timeout: Duration::from_secs(idle_timeout_secs),
                 },
                 &mut std::io::stdout(),
                 &mut std::io::stderr(),
