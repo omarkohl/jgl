@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-15
+
+### Added
+
+- Live progress display during `jgl fetch` — shows per-repo status in real time instead of waiting for all fetches to complete
+- Idle timeout for `jj git fetch` — avoids hanging indefinitely if a fetch stalls
+
 ## [0.3.1] - 2026-04-08
 
 ### Fixed
@@ -46,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic short labels for each repo (disambiguated by path suffix when names collide)
 - `--verbose` / `-v` flag on `jgl fetch` to show full jj output per repository
 
-[Unreleased]: https://github.com/omarkohl/jgl/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/omarkohl/jgl/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/omarkohl/jgl/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/omarkohl/jgl/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/omarkohl/jgl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/omarkohl/jgl/compare/v0.1.0...v0.2.0
