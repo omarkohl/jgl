@@ -484,59 +484,337 @@ fn do_rebase(runner: &impl CommandRunner, dir: &Path, with_conflicts: bool) -> R
     }
 }
 
-const fn rebase_suffix(fetch: &FetchStatus, rebase: &RebaseStatus) -> &'static str {
-    match rebase {
-        RebaseStatus::Skipped => "",
-        // Annotate rebase when the fetch brought in changes, failed, or timed out;
-        // "unchanged (rebased)" looks contradictory when the rebase was a no-op.
-        RebaseStatus::Rebased => {
-            if matches!(fetch, FetchStatus::Unchanged) {
-                ""
-            } else {
-                " (rebased)"
-            }
-        }
-        RebaseStatus::RebasedWithConflicts => " (rebased, conflicts kept)",
-        RebaseStatus::ConflictsUndone => " (rebase had conflicts, undone)",
-        RebaseStatus::Failed(_) => " (rebase failed)",
+const fn fetch_priority(s: &FetchStatus) -> u8 {
+    match s {
+        FetchStatus::Failed(_) => 4,
+        FetchStatus::TimedOut => 3,
+        FetchStatus::Changed => 2,
+        FetchStatus::Unchanged => 1,
+    }
+}
+
+const fn rebase_priority(s: &RebaseStatus) -> u8 {
+    match s {
+        RebaseStatus::Failed(_) => 5,
+        RebaseStatus::RebasedWithConflicts => 4,
+        RebaseStatus::ConflictsUndone => 3,
+        RebaseStatus::Rebased => 2,
+        RebaseStatus::Skipped => 0,
+    }
+}
+
+fn row_priority(r: &FetchResult) -> u8 {
+    fetch_priority(&r.status).max(rebase_priority(&r.rebase_status))
+}
+
+const fn fetch_symbol(s: &FetchStatus) -> (char, &'static str) {
+    match s {
+        FetchStatus::Failed(_) => ('E', "red"),
+        FetchStatus::TimedOut => ('T', "red"),
+        FetchStatus::Changed => ('+', "green"),
+        FetchStatus::Unchanged => ('·', "dim"),
+    }
+}
+
+const fn rebase_symbol(s: &RebaseStatus) -> (char, &'static str) {
+    match s {
+        RebaseStatus::Failed(_) => ('E', "red"),
+        RebaseStatus::RebasedWithConflicts => ('!', "yellow"),
+        RebaseStatus::ConflictsUndone => ('U', "yellow"),
+        RebaseStatus::Rebased => ('+', "green"),
+        RebaseStatus::Skipped => (' ', ""),
+    }
+}
+
+fn apply_color(s: &str, color: &str, use_color: bool) -> String {
+    if !use_color || color.is_empty() {
+        return s.to_owned();
+    }
+    let code = match color {
+        "red" => "\x1B[31m",
+        "green" => "\x1B[32m",
+        "yellow" => "\x1B[33m",
+        "dim" => "\x1B[2m",
+        _ => return s.to_owned(),
+    };
+    format!("{code}{s}\x1B[0m")
+}
+
+/// Returns the char colored and padded to `width` visible characters.
+fn pad_colored(c: char, color: &str, width: usize, use_color: bool) -> String {
+    let s = apply_color(&c.to_string(), color, use_color);
+    format!("{s}{}", " ".repeat(width.saturating_sub(1)))
+}
+
+const fn fetch_legend_text(c: char) -> &'static str {
+    match c {
+        'E' => "error",
+        'T' => "timed out",
+        '+' => "changed",
+        '·' => "unchanged",
+        _ => "?",
+    }
+}
+
+const fn fetch_char_color(c: char) -> &'static str {
+    match c {
+        'E' | 'T' => "red",
+        '+' => "green",
+        '·' => "dim",
+        _ => "",
+    }
+}
+
+const fn rebase_legend_text(c: char) -> &'static str {
+    match c {
+        'E' => "error",
+        '!' => "conflicts kept",
+        'U' => "undone due to conflicts",
+        '+' => "rebased",
+        '·' => "unchanged",
+        _ => "?",
+    }
+}
+
+const fn rebase_char_color(c: char) -> &'static str {
+    match c {
+        'E' => "red",
+        '!' | 'U' => "yellow",
+        '+' => "green",
+        '·' => "dim",
+        _ => "",
     }
 }
 
 /// # Errors
-/// Returns an error if writing to `out` or `err` fails.
+/// Returns an error if writing to `out` fails.
+#[allow(clippy::too_many_lines)]
 pub fn display_results(
     results: &[FetchResult],
-    verbose: bool,
+    show_rebase: bool,
+    use_color: bool,
     out: &mut impl Write,
-    err: &mut impl Write,
 ) -> std::io::Result<()> {
-    for result in results {
-        let suffix = rebase_suffix(&result.status, &result.rebase_status);
-        match &result.status {
-            FetchStatus::Changed => writeln!(out, "  changed    {}{suffix}", result.label)?,
-            FetchStatus::Unchanged => {
-                writeln!(out, "  unchanged  {}{suffix}", result.label)?;
+    if results.is_empty() {
+        return Ok(());
+    }
+
+    let mut sorted: Vec<&FetchResult> = results.iter().collect();
+    sorted.sort_by(|a, b| {
+        row_priority(b)
+            .cmp(&row_priority(a))
+            .then(a.label.to_lowercase().cmp(&b.label.to_lowercase()))
+    });
+
+    let label_width = sorted
+        .iter()
+        .map(|r| r.label.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+
+    // Collect seen symbols in priority order
+    let fetch_order = ['E', 'T', '+', '·'];
+    let rebase_order = ['E', '!', 'U', '+', '·'];
+
+    let seen_fetch: Vec<char> = {
+        let mut chars: Vec<char> = Vec::new();
+        for r in &sorted {
+            let (c, _) = fetch_symbol(&r.status);
+            if !chars.contains(&c) {
+                chars.push(c);
             }
-            FetchStatus::TimedOut => writeln!(err, "  timed out  {}", result.label)?,
-            FetchStatus::Failed(e) => writeln!(err, "  error      {}: {e}", result.label)?,
         }
-        if verbose {
-            if let RebaseStatus::Failed(e) = &result.rebase_status {
-                writeln!(err, "  rebase error {}: {e}", result.label)?;
+        chars.sort_by_key(|c| fetch_order.iter().position(|x| x == c).unwrap_or(99));
+        chars
+    };
+
+    let seen_rebase: Vec<char> = if show_rebase {
+        let mut chars: Vec<char> = Vec::new();
+        for r in &sorted {
+            let (c, _) = rebase_symbol(&r.rebase_status);
+            if c != ' ' && !chars.contains(&c) {
+                chars.push(c);
             }
+        }
+        chars.sort_by_key(|c| rebase_order.iter().position(|x| x == c).unwrap_or(99));
+        chars
+    } else {
+        Vec::new()
+    };
+
+    // Header
+    if show_rebase {
+        writeln!(
+            out,
+            "  {:<5}  {:<6}  {:<lw$}  detail",
+            "fetch",
+            "rebase",
+            "repo",
+            lw = label_width
+        )?;
+        writeln!(
+            out,
+            "  {:<5}  {:<6}  {:-<lw$}  ------",
+            "-----",
+            "------",
+            "",
+            lw = label_width
+        )?;
+    } else {
+        writeln!(
+            out,
+            "  {:<5}  {:<lw$}  detail",
+            "fetch",
+            "repo",
+            lw = label_width
+        )?;
+        writeln!(
+            out,
+            "  {:<5}  {:-<lw$}  ------",
+            "-----",
+            "",
+            lw = label_width
+        )?;
+    }
+
+    // Rows
+    for result in &sorted {
+        let (fc, fc_color) = fetch_symbol(&result.status);
+        let fc_col = pad_colored(fc, fc_color, 5, use_color);
+
+        let detail = match &result.status {
+            FetchStatus::Failed(e) => Some(e.as_str()),
+            _ => None,
+        };
+
+        if show_rebase {
+            let (rc, rc_color) = rebase_symbol(&result.rebase_status);
+            let rc_col = pad_colored(rc, rc_color, 6, use_color);
+            if let Some(d) = detail {
+                writeln!(
+                    out,
+                    "  {fc_col}  {rc_col}  {:<lw$}  {d}",
+                    result.label,
+                    lw = label_width
+                )?;
+            } else {
+                writeln!(out, "  {fc_col}  {rc_col}  {}", result.label)?;
+            }
+        } else if let Some(d) = detail {
+            writeln!(
+                out,
+                "  {fc_col}  {:<lw$}  {d}",
+                result.label,
+                lw = label_width
+            )?;
+        } else {
+            writeln!(out, "  {fc_col}  {}", result.label)?;
         }
     }
+
+    // Legend
+    writeln!(out)?;
+    let fetch_legend: String = seen_fetch
+        .iter()
+        .map(|&c| {
+            let colored = apply_color(&c.to_string(), fetch_char_color(c), use_color);
+            format!("{colored}={}", fetch_legend_text(c))
+        })
+        .collect::<Vec<_>>()
+        .join("  ");
+    writeln!(out, "fetch: {fetch_legend}")?;
+
+    if show_rebase && !seen_rebase.is_empty() {
+        let rebase_legend: String = seen_rebase
+            .iter()
+            .map(|&c| {
+                let colored = apply_color(&c.to_string(), rebase_char_color(c), use_color);
+                format!("{colored}={}", rebase_legend_text(c))
+            })
+            .collect::<Vec<_>>()
+            .join("  ");
+        writeln!(out, "rebase: {rebase_legend}")?;
+    }
+
+    // Summary
+    let total = results.len();
+    let fetch_errors = results
+        .iter()
+        .filter(|r| matches!(r.status, FetchStatus::Failed(_)))
+        .count();
+    let fetch_timeouts = results
+        .iter()
+        .filter(|r| matches!(r.status, FetchStatus::TimedOut))
+        .count();
+    let fetch_changed = results
+        .iter()
+        .filter(|r| matches!(r.status, FetchStatus::Changed))
+        .count();
+    let fetch_unchanged = results
+        .iter()
+        .filter(|r| matches!(r.status, FetchStatus::Unchanged))
+        .count();
+    let rebase_rebased = results
+        .iter()
+        .filter(|r| matches!(r.rebase_status, RebaseStatus::Rebased))
+        .count();
+    let rebase_conflicts = results
+        .iter()
+        .filter(|r| matches!(r.rebase_status, RebaseStatus::RebasedWithConflicts))
+        .count();
+    let rebase_undone = results
+        .iter()
+        .filter(|r| matches!(r.rebase_status, RebaseStatus::ConflictsUndone))
+        .count();
+    let rebase_errors = results
+        .iter()
+        .filter(|r| matches!(r.rebase_status, RebaseStatus::Failed(_)))
+        .count();
+
+    let mut summary_parts: Vec<String> = Vec::new();
+    if fetch_errors > 0 {
+        summary_parts.push(format!("{fetch_errors} fetch error"));
+    }
+    if fetch_timeouts > 0 {
+        summary_parts.push(format!("{fetch_timeouts} timed out"));
+    }
+    if fetch_changed > 0 {
+        summary_parts.push(format!("{fetch_changed} fetch changed"));
+    }
+    if fetch_unchanged > 0 {
+        summary_parts.push(format!("{fetch_unchanged} unchanged"));
+    }
+    if rebase_rebased > 0 {
+        summary_parts.push(format!("{rebase_rebased} rebased"));
+    }
+    if rebase_conflicts > 0 {
+        summary_parts.push(format!("{rebase_conflicts} rebase conflicts"));
+    }
+    if rebase_undone > 0 {
+        summary_parts.push(format!("{rebase_undone} rebase undone"));
+    }
+    if rebase_errors > 0 {
+        summary_parts.push(format!("{rebase_errors} rebase error"));
+    }
+
+    let suffix = if summary_parts.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", summary_parts.join(", "))
+    };
+    writeln!(
+        out,
+        "\n{total} repo{}{suffix}",
+        if total == 1 { "" } else { "s" }
+    )?;
+
     Ok(())
 }
 
 /// # Errors
 /// Returns an error if the config cannot be loaded or any fetch fails.
-pub fn run(
-    config_path: &Path,
-    opts: &FetchOptions,
-    out: &mut impl Write,
-    err: &mut impl Write,
-) -> Result<()> {
+pub fn run(config_path: &Path, opts: &FetchOptions, out: &mut impl Write) -> Result<()> {
     let config = Config::load_or_default(config_path)?;
 
     if config.repos.is_empty() {
@@ -552,6 +830,7 @@ pub fn run(
     };
 
     let is_tty = std::io::stdout().is_terminal();
+    let use_color = is_tty && std::env::var("NO_COLOR").is_err();
     let (progress_tx, display_handle) = if is_tty {
         let (tx, rx) = mpsc::sync_channel(PARALLEL_LIMIT * 2);
         let handle = thread::spawn(|| progress_display_loop(rx));
@@ -567,7 +846,7 @@ pub fn run(
         handle.join().unwrap_or(());
     }
 
-    display_results(&results, opts.verbose, out, err)?;
+    display_results(&results, opts.rebase, use_color, out)?;
 
     let failures = results
         .iter()
@@ -731,8 +1010,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let config_path = tmp.path().join("config.toml");
         let mut out = Vec::new();
-        let mut err = Vec::new();
-        run(&config_path, &no_rebase(), &mut out, &mut err).unwrap();
+        run(&config_path, &no_rebase(), &mut out).unwrap();
         assert!(String::from_utf8(out)
             .unwrap()
             .contains("No repositories registered"));
@@ -1056,40 +1334,6 @@ mod tests {
         assert!(labels.is_empty());
     }
 
-    // --- rebase_suffix display tests ---
-
-    #[test]
-    fn rebased_suffix_shown_only_when_fetch_changed() {
-        assert_eq!(
-            rebase_suffix(&FetchStatus::Changed, &RebaseStatus::Rebased),
-            " (rebased)",
-            "should show (rebased) when fetch changed"
-        );
-        assert_eq!(
-            rebase_suffix(&FetchStatus::Unchanged, &RebaseStatus::Rebased),
-            "",
-            "should suppress (rebased) when fetch unchanged"
-        );
-    }
-
-    #[test]
-    fn notable_rebase_suffixes_always_shown() {
-        for fetch in [FetchStatus::Changed, FetchStatus::Unchanged] {
-            assert_eq!(
-                rebase_suffix(&fetch, &RebaseStatus::ConflictsUndone),
-                " (rebase had conflicts, undone)"
-            );
-            assert_eq!(
-                rebase_suffix(&fetch, &RebaseStatus::RebasedWithConflicts),
-                " (rebased, conflicts kept)"
-            );
-            assert_eq!(
-                rebase_suffix(&fetch, &RebaseStatus::Failed("e".into())),
-                " (rebase failed)"
-            );
-        }
-    }
-
     // --- idle timeout tests ---
 
     #[test]
@@ -1146,16 +1390,15 @@ mod tests {
             rebase_status: RebaseStatus::Skipped,
         }];
         let mut out = Vec::new();
-        let mut err = Vec::new();
-        display_results(&results, false, &mut out, &mut err).unwrap();
-        let err_str = String::from_utf8(err).unwrap();
+        display_results(&results, false, false, &mut out).unwrap();
+        let out_str = String::from_utf8(out).unwrap();
         assert!(
-            err_str.contains("timed out"),
-            "expected 'timed out' in stderr, got: {err_str}"
+            out_str.contains("timed out"),
+            "expected 'timed out' in output, got: {out_str}"
         );
         assert!(
-            err_str.contains("repo"),
-            "expected label in stderr, got: {err_str}"
+            out_str.contains("repo"),
+            "expected label in output, got: {out_str}"
         );
     }
 

@@ -73,7 +73,6 @@ fn fetch_with_no_config_succeeds() {
             ),
         },
         &mut std::io::sink(),
-        &mut std::io::sink(),
     )
     .unwrap();
 }

@@ -63,7 +63,6 @@ pub fn run() -> Result<()> {
                     idle_timeout: Duration::from_secs(idle_timeout_secs),
                 },
                 &mut std::io::stdout(),
-                &mut std::io::stderr(),
             )
         }
     }

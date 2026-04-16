@@ -90,7 +90,6 @@ fn fetch_pulls_commits_pushed_by_clone() {
             ),
         },
         &mut std::io::sink(),
-        &mut std::io::sink(),
     )
     .unwrap();
 
@@ -148,7 +147,6 @@ fn fetch_multiple_repos_all_updated() {
             ),
         },
         &mut std::io::sink(),
-        &mut std::io::sink(),
     )
     .unwrap();
 
@@ -189,7 +187,6 @@ fn fetch_fails_when_repo_is_deleted() {
             ),
         },
         &mut std::io::sink(),
-        &mut std::io::sink(),
     )
     .unwrap_err();
     assert!(err.to_string().contains("failed"));
@@ -224,7 +221,6 @@ fn fetch_fails_when_remote_is_deleted() {
                 jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
             ),
         },
-        &mut std::io::sink(),
         &mut std::io::sink(),
     )
     .unwrap_err();
@@ -280,7 +276,6 @@ fn fetch_continues_after_partial_failure() {
                 jgl::commands::fetch::DEFAULT_IDLE_TIMEOUT_SECS,
             ),
         },
-        &mut std::io::sink(),
         &mut std::io::sink(),
     )
     .unwrap_err();
@@ -472,16 +467,13 @@ fn fetch_rebase_fails_when_working_change_on_immutable_not_in_main() {
     );
 
     let mut out = Vec::<u8>::new();
-    let mut err = Vec::<u8>::new();
-    jgl::commands::fetch::display_results(&results, false, &mut out, &mut err).unwrap();
+    jgl::commands::fetch::display_results(&results, true, false, &mut out).unwrap();
     let stdout = String::from_utf8(out).unwrap();
-    let stderr = String::from_utf8(err).unwrap();
 
     assert!(
-        stdout.contains("(rebase failed)"),
-        "stdout should contain '(rebase failed)': {stdout:?}"
+        stdout.contains("rebase error"),
+        "stdout should contain 'rebase error': {stdout:?}"
     );
-    assert!(stderr.is_empty(), "stderr should be empty, got: {stderr:?}");
 }
 
 #[test]
