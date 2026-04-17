@@ -66,3 +66,20 @@ Keep messages short. Focus on *why*, not *what*.
 ## Before submitting
 
 Run `just check` — it mirrors the CI pipeline exactly. PRs must pass CI.
+
+## Releasing
+
+1. Update `CHANGELOG.md` — add a `## [x.y.z] - YYYY-MM-DD` section with release notes.
+2. Set the version in `Cargo.toml` (and run `cargo generate-lockfile` to update `Cargo.lock`).
+3. Commit: `chore: release x.y.z`
+4. Tag and push:
+   ```sh
+   git tag vx.y.z
+   git push origin main vx.y.z
+   ```
+   Pushing the tag triggers the GitHub Actions release workflow, which builds binaries and creates a GitHub release.
+5. Publish to crates.io:
+   ```sh
+   cargo publish
+   ```
+6. Set the next dev version in `Cargo.toml` (e.g. `x.y+1.0-dev`), update `Cargo.lock`, and commit: `dev: set version x.y+1.0-dev`.
