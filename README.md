@@ -47,6 +47,12 @@ idle_timeout = 10      # kill fetch if silent for this many seconds; 0 disables 
 
 CLI flags override config: `--rebase`/`--no-rebase`, `--with-conflicts`/`--without-conflicts`, and `--idle-timeout <seconds>`.
 
+### SSH authentication
+
+For SSH remotes, use an SSH agent (`ssh-agent` / `ssh-add`) so the passphrase is
+unlocked once and reused across all repos. Without an agent, each fetch spawns a
+fresh SSH process and may prompt for the passphrase repeatedly.
+
 ## Shell completions
 
 ```sh
