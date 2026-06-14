@@ -19,6 +19,8 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    assignees:
+      - "omarkohl"
     groups:
       github-actions:
         patterns:
